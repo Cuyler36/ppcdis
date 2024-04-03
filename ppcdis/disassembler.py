@@ -112,6 +112,8 @@ class DisasmLine:
                         prefix.append(f".global {name}")
                         prefix.append(f"{name}:")
             else:
+                # Use the inline version of the name for non-global addresses if inline asm
+                name = sym.get_name_inline(self.instr.address, hashable, True) if inline else name
                 prefix.append(f"{name}:")
 
         # Add jumptable label if required
@@ -191,7 +193,7 @@ class Disassembler:
         dest = instr.operands[-1].imm
         
         # Get symbol name
-        name = self._sym.get_name(dest, hashable)
+        name = self._sym.get_name_inline(dest, hashable) if inline and not self._sym.is_global(dest) else self._sym.get_name(dest, hashable)
 
         # Use hardcoded address if needed
         # TODO: make shiftable somehow
