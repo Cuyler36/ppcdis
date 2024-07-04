@@ -233,6 +233,24 @@ class SymbolGetter:
                 return sym.name
         else:
             return None
+        
+    def get_name_inline(self, addr: int, hash_mode=False, miss_ok=False) -> str:
+        """Checks the name of the symbol at an address
+        for inline asm functions
+        
+        Asserts the symbol exists unless miss_ok"""
+
+        assert miss_ok or addr in self._sym, f"Address {addr:x} missed in analysis"
+
+        sym = self._sym.get(addr)
+
+        if sym is not None:
+            if hash_mode:
+                return self.get_hash_name(addr)
+            else:
+                return f"lbl_{addr:x}"
+        else:
+            return None
 
     def is_global(self, addr: int, miss_ok=False) -> bool:
         """Checks whether the symbol at an address is global
