@@ -2,14 +2,16 @@
 Diffs the sections and relocations (where possible) of a dol/rel file
 """
 
+from typing import Dict
 import colorama as col
 
 from .binarybase import BinaryReader
 from .binaryrel import RelReader, RelSize
 
+
 def print_diff(name: str, a: int, b: int):
     """Prints the diff of two integer values"""
-    
+
     if a == b:
         clr = ""
     elif b > a:
@@ -19,6 +21,7 @@ def print_diff(name: str, a: int, b: int):
 
     print(f"\t{name:10}:  {a:#10x}  {clr}{b:#10x}{col.Style.RESET_ALL}")
 
+
 def print_eq(name: str, a, b):
     """Prints the equality of two objects"""
 
@@ -26,22 +29,44 @@ def print_eq(name: str, a, b):
         msg = "yes"
     else:
         msg = col.Fore.RED + "no"
-    
+
     print(f"\t{name:10}:  {msg}{col.Style.RESET_ALL}")
+
+
+def lookup(yml: Dict, addr: int) -> str:
+    """Gets a symbol name from a yml by address"""
+
+    if yml is None:
+        return ""
+    start_addr = addr
+
+    addr &= ~3
+    # Try globals first
+    ret = yml.get("global", {}).get(addr)
+    if ret is not None:
+        return f"{ret}+0x{(start_addr-addr):X}"
+
+    # If we didn't hit the symbol we need to back up by 4 bytes at a time.
+    addr -= 4
+    while ret is None and addr >= 0:
+        ret = yml.get("global", {}).get(addr)
+        addr -= 4
+
+    if ret is not None:
+        return f"{ret}+0x{(start_addr-addr):X}"
+    return ret
+
 
 def diff_secs(good: BinaryReader, test: BinaryReader) -> bool:
     """Prints the diff of the sections in two binaries
     Returns whether any diffs were found"""
-    
+
     any_diff = False
 
     for i, (s1, s2) in enumerate(zip(good.sections, test.sections)):
         hash1 = good.section_sha(s1)
         hash2 = test.section_sha(s2)
-        if (
-            hash1 != hash2 or
-            s1.size != s2.size
-        ):
+        if hash1 != hash2 or s1.size != s2.size:
             any_diff = True
             print(f"Section {i} {s1.name}")
             print_diff("Offset", s1.offset, s2.offset)
@@ -51,7 +76,8 @@ def diff_secs(good: BinaryReader, test: BinaryReader) -> bool:
 
     return any_diff
 
-def diff_relocs(good: RelReader, test: RelReader, max_diffs=-1):
+
+def diff_relocs(good: RelReader, test: RelReader, max_diffs=-1, symbols=None):
     """Prints the diff of the relocations in two rels"""
 
     n = 0
@@ -59,7 +85,8 @@ def diff_relocs(good: RelReader, test: RelReader, max_diffs=-1):
     for i, (r1, r2) in enumerate(zip(good.ordered_relocs, test.ordered_relocs)):
         if r1 != r2:
             any_diff = True
-            print(f"Reloc {i} (0x{i * RelSize.RELOC_ENTRY})")
+            symbol_name = lookup(symbols, r1.write_addr)
+            print(f"Reloc {i} (0x{i * RelSize.RELOC_ENTRY}) {symbol_name}")
 
             print_diff("Module", r1.target_module, r2.target_module)
             print_diff("Offset", r1.offset, r2.offset)
@@ -67,7 +94,9 @@ def diff_relocs(good: RelReader, test: RelReader, max_diffs=-1):
             print_diff("Section", r1.section, r2.section)
             print_diff("Addend", r1.addend, r2.addend)
             if r1.write_addr is not None and r2.write_addr is not None:
-                print_diff("Target", good.get_reloc_target(r1), test.get_reloc_target(r2))
+                print_diff(
+                    "Target", good.get_reloc_target(r1), test.get_reloc_target(r2)
+                )
                 print_diff("Write Addr", r1.write_addr, r2.write_addr)
             n += 1
             if n == max_diffs:
